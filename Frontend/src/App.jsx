@@ -5,8 +5,8 @@ import TextField from "@mui/material/TextField";
 import Box from "@mui/material/Box";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
-import {db} from "./Firebase.jsx";
-import { doc, setDoc, deleteDoc, collection, getDocs } from "firebase/firestore"; 
+
+const API_URL = "https://todo-app-mern-sigma.vercel.app/todos";
 
 function App() {
   let [inputValue, setinputValue] = useState("");
@@ -16,16 +16,15 @@ function App() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const querySnapshot = await getDocs(collection(db, "Tasks"));
-      const todosArray = [];
+      try {
+        const res = await fetch(API_URL);
+        const data = await res.json();
 
-      querySnapshot.forEach((doc) => {
-        todosArray.push({ id: doc.id, ...doc.data() });
-      });
-
-      settasks(todosArray);
+        settasks(data.todos || []);
+      } catch (err) {
+        console.error("Error fetching tasks:", err);
+      }
     };
-
     fetchData();
   }, []);
 
@@ -38,59 +37,58 @@ function App() {
     setinputValue(e.target.value);
   };
 
-  let add = async() => {
+  let add = async () => {
     const capitalizedTask = capitalizeFirstLetter(inputValue.trim());
+    if (!capitalizedTask) return;
 
-    // if(editIndex!==null) {
-    //   const updatedTasks = [...tasks];
-      
-    //   updatedTasks[editIndex] = capitalizedTask;
-    //   settasks(updatedTasks);
-    //   setEditIndex(null)
-    // } else {
-    // settasks([...tasks,capitalizedTask]);
-    // }
+    if (editIndex !== null) {
+      const taskToUpdate = tasks[editIndex];
 
-    // setinputValue("");
+      try {
+        const res = await fetch(`${API_URL}/${taskToUpdate._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task: capitalizedTask }),
+        });
+        const updatedTask = await res.json();
 
-    // let dynamicID = Math.round(Math.random()*511546).toString();
-
-    // let saveData = await setDoc(doc(db, "Tasks", dynamicID), {task: capitalizedTask, id: dynamicID});
-    // console.log(saveData);
-
-    if(editIndex!==null) {
-      const updatedTasks = [...tasks];
-      updatedTasks[editIndex].task = capitalizedTask;
-    
-      settasks(updatedTasks);
-      setEditIndex(null);
-    
-      await setDoc(doc(db, "Tasks", updatedTasks[editIndex].id), {
-        task: capitalizedTask,
-        id: updatedTasks[editIndex].id
-      });
-      setinputValue("");
+        const updatedTasks = [...tasks];
+        updatedTasks[editIndex] = updatedTask;
+        settasks(updatedTasks);
+        setEditIndex(null);
+        setinputValue("");
+      } catch (err) {
+        console.error("Error updating task:", err);
+      }
     } else {
-      let dynamicID = Math.round(Math.random()*511546).toString();
-    
-      const newTask = { task: capitalizedTask, id: dynamicID };
-    
-      settasks([...tasks, newTask]);
-    
-      await setDoc(doc(db, "Tasks", dynamicID), newTask);
-      setinputValue("");
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task: capitalizedTask }),
+        });
+        const newTask = await res.json();
+
+        settasks([...tasks, newTask]);
+        setinputValue("");
+      } catch (err) {
+        console.error("Error adding task:", err);
+      }
     }
-    
-    
-  }
+  };
 
   let del = async (i) => {
     const taskToDelete = tasks[i];
-    const updatedTasks = tasks.filter((_, index) => index !== i);
-    settasks(updatedTasks);
-    await deleteDoc(doc(db, "Tasks", taskToDelete.id));
-  }
-  
+    try {
+      await fetch(`${API_URL}/${taskToDelete._id}`, {
+        method: "DELETE",
+      });
+      const updatedTasks = tasks.filter((_, index) => index !== i);
+      settasks(updatedTasks);
+    } catch (err) {
+      console.error("Error deleting task:", err);
+    }
+  };
 
   useEffect(() => {
     if (editIndex !== null && editInputRef.current) {
@@ -99,75 +97,67 @@ function App() {
   }, [editIndex]);
 
   let update = (i) => {
-    setinputValue(tasks[i].task); 
+    setinputValue(tasks[i].task);
     setEditIndex(i);
-  }
-  
+  };
 
   return (
     <>
       <Box className={styles.container}>
-      <h1 className={styles.h1}>Todo App</h1>
-      <Box className={styles.box}>
-        <TextField
+        <h1 className={styles.h1}>Todo App</h1>
+        <Box className={styles.box}>
+          <TextField
+            autoComplete="off"
+            className={styles.inputField}
+            inputRef={editInputRef}
+            value={inputValue}
+            label="Task"
+            variant="outlined"
+            onChange={handleChange}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                add();
+              }
+            }}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                backgroundColor: "white",
+              },
+              "& .MuiOutlinedInput-input": {
+                backgroundColor: "white",
+              },
+            }}
+          />
+          <Button variant="contained" onClick={add} className={styles.addBtn}>
+            +
+          </Button>
+        </Box>
 
-          autoComplete="off"
-          className={styles.inputField}
-          inputRef={editInputRef}
-          value={inputValue}
-          label="Task"
-          variant="outlined"
-          onChange={handleChange}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              add();
-            }
-          }}
-          sx={{
-            "& .MuiOutlinedInput-root": {
-              backgroundColor: "white",
-            },
-            "& .MuiOutlinedInput-input": {
-              backgroundColor: "white",
-            }
-          }}
-        />
-        <Button
-          variant="contained"
-          onClick={add}
-          className={styles.addBtn}
-         
-        >
-          +
-        </Button>
-      </Box>
-
-      <Box>
-        <ul className={styles.list}>
-        {tasks.map((e, i) => (
-  <li key={e.id} className={styles.li}>
-    {e.task}
-    <Box className={styles.iconContainer}>
-      <Button
-        variant="contained"
-        onClick={() => del(i)}
-        className={styles.delBtn}
-      >
-        <DeleteIcon style={{ fontSize: "1rem" }} />
-      </Button>
-      <Button
-        variant="contained"
-        onClick={() => update(i)}
-        className={styles.updateIcon}
-      >
-        <EditIcon style={{ fontSize: "1rem" }} />
-      </Button>
-    </Box>
-  </li>
-))}
-
-        </ul>
-      </Box>
+        <Box>
+          <ul className={styles.list}>
+            {tasks.map((e, i) => (
+              <li key={e._id} className={styles.li}>
+                {e.task}
+                <Box className={styles.iconContainer}>
+                  <Button
+                    variant="contained"
+                    onClick={() => del(i)}
+                    className={styles.delBtn}
+                  >
+                    <DeleteIcon style={{ fontSize: "1rem" }} />
+                  </Button>
+                  <Button
+                    variant="contained"
+                    onClick={() => update(i)}
+                    className={styles.updateIcon}
+                  >
+                    <EditIcon style={{ fontSize: "1rem" }} />
+                  </Button>
+                </Box>
+              </li>
+            ))}
+          </ul>
+        </Box>
       </Box>
     </>
   );
